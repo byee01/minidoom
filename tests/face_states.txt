@@ -1,0 +1,32 @@
+# Status face follows the engine: pain tiers by health, ouch on big hits, dead at 0 HP.
+# faceindex = tier*8 + sub (sub 0-2 straight, 3/4 turn, 5 ouch, 6 grin, 7 rampage); 40 god, 41 dead.
+2 face 1
+5 expect faceindex < 8
+5 dump build/face_t0.ppm
+10 damage 30
+# sourceless damage: vanilla shows the rampage-offset face (tier*8+7), not ouch (ouch is Doom's
+# health-*rise* bug, ST_MUCHPAIN); this asserts the engine's own rule.
+11 expect faceindex == 15
+11 dump build/face_hurt.ppm
+80 expect health == 70
+80 expect faceindex >= 8
+80 expect faceindex < 16
+80 dump build/face_t1.ppm
+81 damage 45
+160 expect faceindex >= 24
+160 expect faceindex < 32
+160 dump build/face_t3.ppm
+161 damage 20
+230 expect faceindex >= 32
+230 expect faceindex < 40
+230 dump build/face_t4.ppm
+231 damage 50
+240 expect dead == 1
+240 expect faceindex == 41
+240 dump build/face_dead.ppm
+300 face 0
+301 dump build/face_dead_fallback.ppm
+302 restart
+340 expect dead == 0
+340 expect health == 100
+340 end

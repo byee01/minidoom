@@ -1,0 +1,561 @@
+diff --git a/doomgeneric/d_loop.c b/doomgeneric/d_loop.c
+index 1939dbd..0932bf2 100644
+--- a/doomgeneric/d_loop.c
++++ b/doomgeneric/d_loop.c
+@@ -781,6 +781,11 @@ void TryRunTics (void)
+ 	    return;
+ 	}
+ 
++#ifdef LENS
++        // The Lens clock is virtual and never advances inside a call:
++        // waiting here would spin forever. Give control back to JS.
++        return;
++#endif
+         I_Sleep(1);
+     }
+ 
+diff --git a/doomgeneric/d_main.c b/doomgeneric/d_main.c
+index 9012e5f..117599d 100644
+--- a/doomgeneric/d_main.c
++++ b/doomgeneric/d_main.c
+@@ -195,6 +195,10 @@ void D_Display (void)
+ 		borderdrawcount = 3;
+     }
+ 
++#ifdef LENS
++    // No melt wipe: its loop waits on I_GetTime, which is frozen within a call.
++    wipegamestate = gamestate;
++#endif
+     // save the current screen if about to wipe
+     if (gamestate != wipegamestate)
+ 		{
+@@ -412,7 +416,12 @@ void doomgeneric_Tick()
+     S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
+ 
+     // Update display, next frame, with current state.
++#ifdef LENS
++    extern int lens_skip_display;
++    if (screenvisible && !lens_skip_display)
++#else
+     if (screenvisible)
++#endif
+     {
+         D_Display ();
+     }
+diff --git a/doomgeneric/g_game.c b/doomgeneric/g_game.c
+index 9954d78..e567c7a 100644
+--- a/doomgeneric/g_game.c
++++ b/doomgeneric/g_game.c
+@@ -561,6 +561,16 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
+  
+     cmd->forwardmove += forward; 
+     cmd->sidemove += side;
++#ifdef LENS
++    // Analog twin-stick input from the Lens (lens_set_analog): movement capped below walk
++    // speed, turn rate proportional to stick deflection.
++    {
++        extern int lens_analog_forward, lens_analog_side, lens_analog_turn;
++        cmd->forwardmove += lens_analog_forward;
++        cmd->sidemove += lens_analog_side;
++        cmd->angleturn -= lens_analog_turn;
++    }
++#endif
+     
+     // special buttons
+     if (sendpause) 
+@@ -1348,6 +1358,14 @@ void G_DoCompleted (void)
+     int             i; 
+ 	 
+     gameaction = ga_nothing; 
++#ifdef LENS
++    // One-level lens: no intermission, no next map. JS shows the end card.
++    {
++        extern void lens_on_level_done(int secret);
++        lens_on_level_done(secretexit);
++        return;
++    }
++#endif
+  
+     for (i=0 ; i<MAXPLAYERS ; i++) 
+ 	if (playeringame[i]) 
+diff --git a/doomgeneric/hu_lib.c b/doomgeneric/hu_lib.c
+index 47038a0..0101712 100644
+--- a/doomgeneric/hu_lib.c
++++ b/doomgeneric/hu_lib.c
+@@ -103,6 +103,19 @@ HUlib_drawTextLine
+ 
+     // draw the new stuff
+     x = l->x;
++#ifdef LENS
++    // The Lens crops the sides of the 3D view on tall phones: centre messages so they stay visible.
++    {
++        int total = 0;
++        for (i = 0; i < l->len; i++)
++        {
++            c = toupper((int)l->l[i]);
++            total += (c != ' ' && c >= l->sc && c <= '_') ? SHORT(l->f[c - l->sc]->width) : 4;
++        }
++        if (total < SCREENWIDTH)
++            x = (SCREENWIDTH - total) / 2;
++    }
++#endif
+     for (i=0;i<l->len;i++)
+     {
+ 	c = toupper((int)l->l[i]);
+diff --git a/doomgeneric/i_sound.c b/doomgeneric/i_sound.c
+index c80a9d1..9cd841e 100644
+--- a/doomgeneric/i_sound.c
++++ b/doomgeneric/i_sound.c
+@@ -18,7 +18,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ 
+-#if defined(FEATURE_SOUND) && !defined(__DJGPP__)
++#if defined(FEATURE_SOUND) && !defined(__DJGPP__) && !defined(LENS)
+ #include <SDL_mixer.h>
+ #endif
+ 
+diff --git a/doomgeneric/i_video.c b/doomgeneric/i_video.c
+index 84bebde..c8bcbae 100644
+--- a/doomgeneric/i_video.c
++++ b/doomgeneric/i_video.c
+@@ -320,6 +320,11 @@ void I_UpdateNoBlit (void)
+ 
+ void I_FinishUpdate (void)
+ {
++#ifdef LENS
++    // JS reads I_VideoBuffer (320x200 indices) directly; no scaled copy.
++    DG_DrawFrame();
++    return;
++#endif
+     int y;
+     int x_offset, y_offset, x_offset_end;
+     unsigned char *line_in, *line_out;
+@@ -388,6 +393,12 @@ void I_ReadScreen (byte* scr)
+ void I_SetPalette (byte* palette)
+ {
+ 	int i;
++#ifdef LENS
++    {
++        extern void lens_on_palette(const byte *raw_palette);
++        lens_on_palette(palette);
++    }
++#endif
+ 	//col_t* c;
+ 
+ 	//for (i = 0; i < 256; i++)
+diff --git a/doomgeneric/m_fixed.c b/doomgeneric/m_fixed.c
+index 23f6ff3..c779169 100644
+--- a/doomgeneric/m_fixed.c
++++ b/doomgeneric/m_fixed.c
+@@ -24,12 +24,28 @@
+ #include "i_system.h"
+ 
+ #include "m_fixed.h"
++#include <math.h>
+ 
+ 
+ 
+ 
+ // Fixme. __USE_C_FIXED__ or something.
+ 
++#ifdef LENS
++// LENS: no 64-bit math. wasm2js emulates i64 in software, which made these
++// two functions the hottest code in the renderer. Both are bit-exact with
++// the originals (verified by engine/lens/test_fixed.c).
++fixed_t FixedMul(fixed_t a, fixed_t b)
++{
++    int32_t ah = a >> 16, bh = b >> 16;
++    uint32_t al = (uint32_t)a & 0xffff, bl = (uint32_t)b & 0xffff;
++    uint32_t r = ((uint32_t)(ah * bh) << 16)
++               + (uint32_t)(ah * (int32_t)bl)
++               + (uint32_t)((int32_t)al * bh)
++               + ((al * bl) >> 16);
++    return (fixed_t)r;
++}
++#else
+ fixed_t
+ FixedMul
+ ( fixed_t	a,
+@@ -37,6 +53,7 @@ FixedMul
+ {
+     return ((int64_t) a * (int64_t) b) >> FRACBITS;
+ }
++#endif
+ 
+ 
+ 
+@@ -52,11 +69,25 @@ fixed_t FixedDiv(fixed_t a, fixed_t b)
+     }
+     else
+     {
++#ifdef LENS
++	// trunc(a*65536/b) in doubles; a*65536 < 2^47 and q*b are exact, so one
++	// remainder check corrects the at-most-1 rounding error of the division.
++	double x = (double)a * 65536.0, y = (double)b;
++	double q = trunc(x / y);
++	double r = x - q * y;
++	double dir = ((x < 0) != (y < 0)) ? -1.0 : 1.0;
++	if (r != 0 && ((r < 0) != (x < 0)))
++	    q -= dir;
++	else if (fabs(r) >= fabs(y))
++	    q += dir;
++	return (fixed_t)q;
++#else
+ 	int64_t result;
+ 
+ 	result = ((int64_t) a << 16) / b;
+ 
+ 	return (fixed_t) result;
++#endif
+     }
+ }
+ 
+diff --git a/doomgeneric/m_misc.c b/doomgeneric/m_misc.c
+index 54b2613..0c12ea5 100644
+--- a/doomgeneric/m_misc.c
++++ b/doomgeneric/m_misc.c
+@@ -66,6 +66,11 @@ void M_MakeDirectory(char *path)
+ boolean M_FileExists(char *filename)
+ {
+     FILE *fstream;
++#ifdef LENS
++    extern int lens_is_memory_wad(const char *path);
++    if (lens_is_memory_wad(filename))
++        return true;
++#endif
+ 
+     fstream = fopen(filename, "r");
+ 
+diff --git a/doomgeneric/r_draw.c b/doomgeneric/r_draw.c
+index 9271bcd..82c7a71 100644
+--- a/doomgeneric/r_draw.c
++++ b/doomgeneric/r_draw.c
+@@ -60,7 +60,25 @@ int		scaledviewwidth;
+ int		viewheight;
+ int		viewwindowx;
+ int		viewwindowy; 
+-byte*		ylookup[MAXHEIGHT]; 
++
++#ifdef LENS
++// LENS truecolor output: drawers write 32-bit RGBA straight into the presented image via
++// lens_colormaps32 (the light tables with the current palette applied), so there is no
++// per-frame 8->32 bit expansion pass. That pass cost ~13 ms/frame in the Lens interpreter.
++#include <stdint.h>
++typedef uint32_t rpix_t;
++extern uint32_t lens_colormaps32[];
++extern uint32_t *lens_view32;
++#define CM32(cm) ((const rpix_t *)(lens_colormaps32 + ((cm) - colormaps)))
++// Spectre fuzz: Doom darkens a neighbour pixel through colormap 6 (~3/4 brightness).
++#define FUZZPIX(v) ((((v) & 0xfcfcfcu) >> 2) * 3u | 0xff000000u)
++#else
++typedef byte rpix_t;
++#define CM32(cm) (cm)
++#define FUZZPIX(v) (colormaps[6*256+(v)])
++#endif
++
++rpix_t*		ylookup[MAXHEIGHT]; 
+ int		columnofs[MAXWIDTH]; 
+ 
+ // Color tables for different players,
+@@ -102,7 +120,7 @@ int			dccount;
+ void R_DrawColumn (void) 
+ { 
+     int			count; 
+-    byte*		dest; 
++    rpix_t*		dest; 
+     fixed_t		frac;
+     fixed_t		fracstep;	 
+  
+@@ -123,6 +141,7 @@ void R_DrawColumn (void)
+     // Use ylookup LUT to avoid multiply with ScreenWidth.
+     // Use columnofs LUT for subwindows? 
+     dest = ylookup[dc_yl] + columnofs[dc_x];  
++    const rpix_t *cm = CM32(dc_colormap);
+ 
+     // Determine scaling,
+     //  which is the only mapping to be done.
+@@ -136,7 +155,7 @@ void R_DrawColumn (void)
+     {
+ 	// Re-map color indices from wall texture column
+ 	//  using a lighting/special effects LUT.
+-	*dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
++	*dest = cm[dc_source[(frac>>FRACBITS)&127]];
+ 	
+ 	dest += SCREENWIDTH; 
+ 	frac += fracstep;
+@@ -208,8 +227,8 @@ void R_DrawColumn (void)
+ void R_DrawColumnLow (void) 
+ { 
+     int			count; 
+-    byte*		dest; 
+-    byte*		dest2;
++    rpix_t*		dest; 
++    rpix_t*		dest2;
+     fixed_t		frac;
+     fixed_t		fracstep;	 
+     int                 x;
+@@ -234,6 +253,8 @@ void R_DrawColumnLow (void)
+     x = dc_x << 1;
+     
+     dest = ylookup[dc_yl] + columnofs[x];
++    
++    const rpix_t *cm = CM32(dc_colormap);
+     dest2 = ylookup[dc_yl] + columnofs[x+1];
+     
+     fracstep = dc_iscale; 
+@@ -242,7 +263,7 @@ void R_DrawColumnLow (void)
+     do 
+     {
+ 	// Hack. Does not work corretly.
+-	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
++	*dest2 = *dest = cm[dc_source[(frac>>FRACBITS)&127]];
+ 	dest += SCREENWIDTH;
+ 	dest2 += SCREENWIDTH;
+ 	frac += fracstep; 
+@@ -283,7 +304,7 @@ int	fuzzpos = 0;
+ void R_DrawFuzzColumn (void) 
+ { 
+     int			count; 
+-    byte*		dest; 
++    rpix_t*		dest; 
+     fixed_t		frac;
+     fixed_t		fracstep;	 
+ 
+@@ -325,7 +346,7 @@ void R_DrawFuzzColumn (void)
+ 	//  a pixel that is either one column
+ 	//  left or right of the current one.
+ 	// Add index from colormap to index.
+-	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]]; 
++	*dest = FUZZPIX(dest[fuzzoffset[fuzzpos]]); 
+ 
+ 	// Clamp table lookup index.
+ 	if (++fuzzpos == FUZZTABLE) 
+@@ -342,8 +363,8 @@ void R_DrawFuzzColumn (void)
+ void R_DrawFuzzColumnLow (void) 
+ { 
+     int			count; 
+-    byte*		dest; 
+-    byte*		dest2; 
++    rpix_t*		dest; 
++    rpix_t*		dest2; 
+     fixed_t		frac;
+     fixed_t		fracstep;	 
+     int x;
+@@ -391,8 +412,8 @@ void R_DrawFuzzColumnLow (void)
+ 	//  a pixel that is either one column
+ 	//  left or right of the current one.
+ 	// Add index from colormap to index.
+-	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]]; 
+-	*dest2 = colormaps[6*256+dest2[fuzzoffset[fuzzpos]]]; 
++	*dest = FUZZPIX(dest[fuzzoffset[fuzzpos]]); 
++	*dest2 = FUZZPIX(dest2[fuzzoffset[fuzzpos]]); 
+ 
+ 	// Clamp table lookup index.
+ 	if (++fuzzpos == FUZZTABLE) 
+@@ -424,7 +445,7 @@ byte*	translationtables;
+ void R_DrawTranslatedColumn (void) 
+ { 
+     int			count; 
+-    byte*		dest; 
++    rpix_t*		dest; 
+     fixed_t		frac;
+     fixed_t		fracstep;	 
+  
+@@ -446,6 +467,9 @@ void R_DrawTranslatedColumn (void)
+ 
+     dest = ylookup[dc_yl] + columnofs[dc_x]; 
+ 
++
++    const rpix_t *cm = CM32(dc_colormap);
++
+     // Looks familiar.
+     fracstep = dc_iscale; 
+     frac = dc_texturemid + (dc_yl-centery)*fracstep; 
+@@ -458,7 +482,7 @@ void R_DrawTranslatedColumn (void)
+ 	//  used with PLAY sprites.
+ 	// Thus the "green" ramp of the player 0 sprite
+ 	//  is mapped to gray, red, black/indigo. 
+-	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
++	*dest = cm[dc_translation[dc_source[frac>>FRACBITS]]];
+ 	dest += SCREENWIDTH;
+ 	
+ 	frac += fracstep; 
+@@ -468,8 +492,8 @@ void R_DrawTranslatedColumn (void)
+ void R_DrawTranslatedColumnLow (void) 
+ { 
+     int			count; 
+-    byte*		dest; 
+-    byte*		dest2; 
++    rpix_t*		dest; 
++    rpix_t*		dest2; 
+     fixed_t		frac;
+     fixed_t		fracstep;	 
+     int                 x;
+@@ -494,6 +518,9 @@ void R_DrawTranslatedColumnLow (void)
+ 
+ 
+     dest = ylookup[dc_yl] + columnofs[x]; 
++
++
++    const rpix_t *cm = CM32(dc_colormap);
+     dest2 = ylookup[dc_yl] + columnofs[x+1]; 
+ 
+     // Looks familiar.
+@@ -508,8 +535,8 @@ void R_DrawTranslatedColumnLow (void)
+ 	//  used with PLAY sprites.
+ 	// Thus the "green" ramp of the player 0 sprite
+ 	//  is mapped to gray, red, black/indigo. 
+-	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
+-	*dest2 = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
++	*dest = cm[dc_translation[dc_source[frac>>FRACBITS]]];
++	*dest2 = cm[dc_translation[dc_source[frac>>FRACBITS]]];
+ 	dest += SCREENWIDTH;
+ 	dest2 += SCREENWIDTH;
+ 	
+@@ -590,7 +617,7 @@ int			dscount;
+ void R_DrawSpan (void) 
+ { 
+     unsigned int position, step;
+-    byte *dest;
++    rpix_t *dest;
+     int count;
+     int spot;
+     unsigned int xtemp, ytemp;
+@@ -619,6 +646,8 @@ void R_DrawSpan (void)
+ 
+     dest = ylookup[ds_y] + columnofs[ds_x1];
+ 
++    const rpix_t *cm = CM32(ds_colormap);
++
+     // We do not check for zero spans here?
+     count = ds_x2 - ds_x1;
+ 
+@@ -631,7 +660,7 @@ void R_DrawSpan (void)
+ 
+ 	// Lookup pixel from flat texture tile,
+ 	//  re-index using light/colormap.
+-	*dest++ = ds_colormap[ds_source[spot]];
++	*dest++ = cm[ds_source[spot]];
+ 
+         position += step;
+ 
+@@ -720,7 +749,7 @@ void R_DrawSpanLow (void)
+ {
+     unsigned int position, step;
+     unsigned int xtemp, ytemp;
+-    byte *dest;
++    rpix_t *dest;
+     int count;
+     int spot;
+ 
+@@ -749,6 +778,8 @@ void R_DrawSpanLow (void)
+ 
+     dest = ylookup[ds_y] + columnofs[ds_x1];
+ 
++    const rpix_t *cm = CM32(ds_colormap);
++
+     do
+     {
+ 	// Calculate current texture index in u,v.
+@@ -758,8 +789,8 @@ void R_DrawSpanLow (void)
+ 
+ 	// Lowres/blocky mode does it twice,
+ 	//  while scale is adjusted appropriately.
+-	*dest++ = ds_colormap[ds_source[spot]];
+-	*dest++ = ds_colormap[ds_source[spot]];
++	*dest++ = cm[ds_source[spot]];
++	*dest++ = cm[ds_source[spot]];
+ 
+ 	position += step;
+ 
+@@ -797,7 +828,11 @@ R_InitBuffer
+ 
+     // Preclaculate all row offsets.
+     for (i=0 ; i<height ; i++) 
++#ifdef LENS
++	ylookup[i] = lens_view32 + (i+viewwindowy)*SCREENWIDTH;
++#else
+ 	ylookup[i] = I_VideoBuffer + (i+viewwindowy)*SCREENWIDTH; 
++#endif
+ } 
+  
+  
+diff --git a/doomgeneric/st_stuff.c b/doomgeneric/st_stuff.c
+index e25accc..167df01 100644
+--- a/doomgeneric/st_stuff.c
++++ b/doomgeneric/st_stuff.c
+@@ -377,7 +377,7 @@ static boolean	oldweaponsowned[NUMWEAPONS];
+ static int	st_facecount = 0;
+ 
+ // current face index, used by w_faces
+-static int	st_faceindex = 0;
++int	st_faceindex = 0; // LENS: exported for the HUD face
+ 
+ // holds key-type for each key box on bar
+ static int	keyboxes[3]; 
+diff --git a/doomgeneric/v_video.c b/doomgeneric/v_video.c
+index 6db28aa..c5f1015 100644
+--- a/doomgeneric/v_video.c
++++ b/doomgeneric/v_video.c
+@@ -33,6 +33,7 @@
+ #include "m_bbox.h"
+ #include "m_misc.h"
+ #include "v_video.h"
++#include <stdint.h>
+ #include "w_wad.h"
+ #include "z_zone.h"
+ 
+@@ -168,6 +169,33 @@ void V_DrawPatch(int x, int y, patch_t *patch)
+ 
+     V_MarkRect(x, y, SHORT(patch->width), SHORT(patch->height));
+ 
++#ifdef LENS
++    // Patches drawn onto the 3D view (HU messages) go to the truecolor view buffer.
++    if (dest_screen == I_VideoBuffer)
++    {
++        extern uint32_t *lens_view32;
++        extern uint32_t lens_pal32[256];
++        uint32_t *top32 = lens_view32 + y * SCREENWIDTH + x;
++        w = SHORT(patch->width);
++        for (col = 0; col < w; col++, top32++)
++        {
++            column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
++            while (column->topdelta != 0xff)
++            {
++                uint32_t *d = top32 + column->topdelta * SCREENWIDTH;
++                source = (byte *)column + 3;
++                count = column->length;
++                while (count--)
++                {
++                    *d = lens_pal32[*source++];
++                    d += SCREENWIDTH;
++                }
++                column = (column_t *)((byte *)column + column->length + 4);
++            }
++        }
++        return;
++    }
++#endif
+     col = 0;
+     desttop = dest_screen + y * SCREENWIDTH + x;
+ 
+diff --git a/doomgeneric/w_file.c b/doomgeneric/w_file.c
+index cce3737..33fd623 100644
+--- a/doomgeneric/w_file.c
++++ b/doomgeneric/w_file.c
+@@ -60,6 +60,14 @@ wad_file_t *W_OpenFile(char *path)
+     // directly into memory.
+     //
+ 
++#ifdef LENS
++    {
++        extern wad_file_class_t lens_memory_wad_file;
++        result = lens_memory_wad_file.OpenFile(path);
++        if (result != NULL)
++            return result;
++    }
++#endif
+     if (!M_CheckParm("-mmap"))
+     {
+         return stdc_wad_file.OpenFile(path);

@@ -1,0 +1,30 @@
+# Twin sticks: analog forward is slower than Doom's walk key; right stick turns proportionally.
+# Walk key for 35 tics (reference), then full-forward analog for 35 tics from the same spot.
+2 down UP
+37 up UP
+60 print px
+61 restart
+70 analog 1000 0 0
+105 analog 0 0 0
+130 print px
+# full-forward analog covers clearly less ground than walking: start -416, walk reaches ~-40
+130 expect px < -150
+130 expect px > -350
+# half right-stick for 35 tics turns right, less than full deflection would
+131 analog 0 0 500
+166 analog 0 0 0
+170 print angle
+170 expect angle >= 270
+170 expect angle <= 330
+171 analog 0 0 1000
+206 analog 0 0 0
+210 print angle
+210 expect angle <= 200
+210 expect angle >= 120
+# strafe right (left stick x): player now faces ~159 deg (west), so their right is north: py increases
+211 print py
+212 analog 0 1000 0
+240 analog 0 0 0
+260 print py
+260 expect py > 280
+260 end

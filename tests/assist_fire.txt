@@ -1,0 +1,14 @@
+# Auto-fire: no shots without an enemy in the crosshair; kills an enemy with no FIRE input.
+# Start faces east down an empty corridor: nothing to shoot, so no ammo is spent.
+30 expect target == 0
+30 expect autofire == 0
+30 expect ammo[0] == 50
+# An enemy appears straight ahead: auto-fire engages and kills it.
+31 spawn 256
+33 expect target == 1
+120 expect kills >= 1
+120 expect ammo[0] < 50
+# Nothing left in the crosshair: firing stops.
+160 expect autofire == 0
+161 dump build/assist_fire.ppm
+161 end

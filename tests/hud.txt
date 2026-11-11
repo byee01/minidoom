@@ -1,0 +1,12 @@
+# HUD composite + live face states
+3 dump build/hud_fallback.ppm
+3 face 1
+4 dump build/hud_live.ppm
+4 type iddqd
+20 dump build/hud_god.ppm
+20 expect godmode == 1
+20 type idkfa
+40 dump build/hud_idkfa.ppm
+40 expect weaponowned[5] == 1
+40 expect cards[0] == 1
+40 end

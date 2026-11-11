@@ -1,0 +1,16 @@
+# Fight: god mode, all weapons, walk east into the first zombiemen while firing.
+# Firing is automatic (auto-fire on enemies in the crosshair). Exercises weapon taps, pain/death/weapon sounds and monster sprites.
+2 type iddqd
+20 type idkfa
+40 tap 4
+41 expect readyweapon >= 0
+60 expect readyweapon == 3
+60 down UP
+400 up UP
+700 expect kills >= 1
+700 expect godmode == 1
+700 expect health >= 100
+701 tap 3
+730 expect readyweapon == 2
+731 dump build/combat.ppm
+731 end

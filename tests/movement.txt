@@ -1,0 +1,26 @@
+# Keys move and turn the player; level exit sets level_done and freezes; restart resets.
+2 print px
+2 print angle
+2 expect angle == 0
+3 down UP
+40 up UP
+41 expect px > -350
+41 down STRAFE_L
+60 up STRAFE_L
+61 expect py > 260
+# +dx (drag right) turns right: clockwise, 0 -> 270 degrees after 2048 units (90 deg)
+62 mouse 2048
+64 expect angle >= 260
+64 expect angle <= 280
+70 down RUN
+70 down UP
+90 up UP
+90 up RUN
+100 exit
+102 expect level_done == 1
+150 expect level_done == 1
+150 restart
+152 expect level_done == 0
+200 expect px == -416
+200 expect py == 256
+200 end

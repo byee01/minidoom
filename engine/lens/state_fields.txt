@@ -1,0 +1,38 @@
+# Single source of truth for the LensState int32 array shared between C and TS.
+# tools/gen_state.py emits engine/lens/lens_state.h and lens/Assets/Scripts/LensState.generated.ts.
+# name                count
+health                  1
+armor                   1
+armortype               1
+ammo                    4
+maxammo                 4
+readyweapon             1
+pendingweapon           1
+weaponowned             9
+cards                   6
+faceindex               1
+damagecount             1
+bonuscount              1
+dead                    1
+godmode                 1
+level_done              1
+secret_exit             1
+kills                   1
+totalkills              1
+items                   1
+totalitems              1
+secrets                 1
+totalsecret             1
+leveltime               1
+gametic                 1
+frame_counter           1
+palette_dirty           1
+backpack                1
+px                      1
+py                      1
+angle                   1
+target                  1
+autofire                1
+autouse_count           1
+face_version            1
+overlay_version         1

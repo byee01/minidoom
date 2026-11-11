@@ -1,0 +1,11 @@
+# Boot, render, walk forward, take a look.
+1 expect health == 100
+1 expect level_done == 0
+2 dump build/f_start.ppm
+35 expect frame_counter >= 30
+35 down UP
+105 up UP
+106 dump build/f_walk.ppm
+106 time
+350 time
+350 end

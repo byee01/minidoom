@@ -1,0 +1,41 @@
+# minidoom engine builds. Run from doomlens/engine.
+#   make -f Makefile.lens native   -> build/headless   (clang, for scripted tests)
+#   make -f Makefile.lens js       -> build/doom.raw.js (emcc -sWASM=0)
+
+DG = doomgeneric/doomgeneric
+L = lens
+B = build
+
+SRC_DOOM = dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop d_main d_mode d_net \
+  f_finale f_wipe g_game hu_lib hu_stuff info i_cdmus i_endoom i_joystick i_scale i_sound i_system \
+  i_timer memio m_argv m_bbox m_cheat m_config m_controls m_fixed m_menu m_misc m_random p_ceilng \
+  p_doors p_enemy p_floor p_inter p_lights p_map p_maputl p_mobj p_plats p_pspr p_saveg p_setup \
+  p_sight p_spec p_switch p_telept p_tick p_user r_bsp r_data r_draw r_main r_plane r_segs r_sky \
+  r_things sha1 sounds statdump st_lib st_stuff s_sound tables v_video wi_stuff w_checksum w_file \
+  w_main w_wad z_zone w_file_stdc i_input i_video doomgeneric
+
+DEFS = -DLENS -DCMAP256 -DFEATURE_SOUND -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200
+WARN = -w
+
+SRCS = $(addprefix $(DG)/, $(addsuffix .c, $(SRC_DOOM))) $(L)/lens_platform.c $(L)/lens_sound.c $(L)/lens_hud.c $(L)/lens_assist.c
+
+EXPORTS = _lens_create,_lens_tick,_lens_restart,_lens_post_key,_lens_post_mouse,_lens_type,_lens_state_ptr,_lens_palette_ptr,_lens_framebuffer_ptr,_lens_wad_alloc,_lens_audio_set_rate,_lens_audio_mix,_lens_set_view,_lens_present,_lens_hud_hit,_lens_face_input_ptr,_lens_face_set_live,_lens_test_fake_face,_lens_face_frame,_lens_tap_key,_lens_test_damage,_lens_test_exit,_lens_set_assist,_lens_test_place,_lens_test_ceiling,_lens_face_ptr,_lens_test_spawn_enemy,_lens_set_analog,_lens_background,_lens_bezel,_lens_set_overlay,_lens_overlay_ptr,_malloc,_free
+
+.PHONY: native js state
+
+state:
+	python3 ../tools/gen_state.py
+
+native: state
+	@mkdir -p $(B)
+	clang -O2 -g $(DEFS) $(WARN) -I$(DG) -I$(L) $(SRCS) $(L)/headless.c -lm -o $(B)/headless
+
+js: state
+	@mkdir -p $(B)
+	emcc -O3 -mbulk-memory $(DEFS) $(WARN) -I$(DG) -I$(L) $(SRCS) \
+	  -sWASM=0 -sENVIRONMENT=shell -sMODULARIZE=1 -sEXPORT_NAME=createDoom \
+	  -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sFILESYSTEM=0 -sLEGACY_VM_SUPPORT=1 \
+	  -sINITIAL_MEMORY=16MB -sALLOW_MEMORY_GROWTH=0 -sASSERTIONS=0 \
+	  -sEXPORTED_FUNCTIONS=$(EXPORTS) \
+	  -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAP32,HEAPF32,stringToUTF8,UTF8ToString \
+	  -o $(B)/doom.raw.js

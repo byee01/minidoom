@@ -1,0 +1,18 @@
+# generated
+/build/
+/lens/
+/lens_debug/
+/engine/build/
+*.dSYM/
+
+# fetched by tools/fetch_deps.sh (pinned + checksummed)
+/engine/doomgeneric/
+data/freedoom.zip
+data/freedoom-0.13.0/
+data/soundfont/FluidR3Mono_GM.sf3
+data/music/e1m1.mid
+
+# local
+.DS_Store
+capture_shotgun.png
+__pycache__/

@@ -1,0 +1,10 @@
+# Auto-use: facing a closed door within use range opens it, without any USE input.
+2 place 504 712 0
+3 expect_ceiling 552 712 -1000
+3 ceiling 552 712
+40 expect autouse_count >= 1
+40 expect_ceiling 552 712 -128
+40 ceiling 552 712
+# while it is open (and while it closes) auto-use must not slam it shut on the player
+80 expect autouse_count == 1
+80 end
