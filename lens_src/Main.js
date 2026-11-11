@@ -24,7 +24,7 @@ var frameNo = 0;
 
 var doom = null;
 var state = null;          // Int32Array view of LensState
-var mode = "loading";      // loading | title | playing | dead | done
+var mode = "loading";      // loading | playing | dead | done
 var paused = false;
 var acc = 0;
 var ui = null;
@@ -76,7 +76,7 @@ function boot() {
     });
     audio.init();
     log("boot ms " + ((nowNs() - t0) / 1e6).toFixed(0) + " wad bytes " + wad.length);
-    setMode("title");
+    setMode("playing");      // no title card: play starts as soon as the engine is up
   }, function (e) {
     log("BOOT FAILED " + e + " " + (e && e.stack));
     log("boot failed; the lens cannot start");
@@ -108,8 +108,7 @@ function mmss(secs) { return Math.floor(secs / 60) + ":" + ("0" + secs % 60).sli
 
 function setMode(m) {
   mode = m;
-  if (m === "title") setOverlay("^^MINIDOOM\n\n^TAP TO START\n\nLEFT STICK MOVES. RIGHT STICK TURNS.\nSHOOTING AND DOORS ARE AUTOMATIC.\nTAP 2-7 FOR WEAPONS.");
-  else if (m === "playing") { setOverlay(null); ui.showReplay(null); }
+  if (m === "playing") { setOverlay(null); ui.showReplay(null); }
   else if (m === "dead") setOverlay(null);
   else if (m === "done") {
     if (recorder.on) recorder.finish(true); else recorder.show();
@@ -168,7 +167,6 @@ function onTouch(kind, id, p) {
   if (!doom) return;
   var l = ui.toLocal(p);
   if (kind === "start") {
-    if (mode === "title") { setMode("playing"); return; }
     if (mode === "done") { doom._lens_restart(); releaseAll(); setMode("playing"); return; }
     if (mode === "dead" && getTime() - deadSince > 1.5) { doom._lens_restart(); releaseAll(); setMode("playing"); return; }
     var zone = ui.zoneAt(l);
@@ -438,9 +436,8 @@ function autopilot() {
   var t = getTime() - auto.t0, S = state, m = auto.mark;
   var stick = ui.moveHome, tstick = ui.turnHome, r = ui.stickRadius;
   var steps = [
-    [0.5, function () { Debug.capture("title", 180); }],
-    [1.0, function () { touchAt("start", zoneCenter("view"), 1); touchAt("end", zoneCenter("view"), 1); }],
-    [1.2, function () { check("tap starts game", mode === "playing", mode); m.px = S[LS.px]; m.py = S[LS.py];
+    [0.5, function () { Debug.capture("start", 180); }],
+    [1.2, function () { check("game starts without a tap", mode === "playing" && overlayText === null, mode + " overlay " + overlayText); m.px = S[LS.px]; m.py = S[LS.py];
                         check("no FIRE/USE zones", !ui.zones.fire && !ui.zones.use, Object.keys(ui.zones).join(","));
                         check("left stick zone is move", ui.zoneAt(stick) === "move", ui.zoneAt(stick));
                         check("right stick zone is turn", ui.zoneAt(tstick) === "turnstick", ui.zoneAt(tstick)); }],
@@ -613,12 +610,7 @@ function setup() {
   script.createEvent("OnPauseEvent").bind(function () { paused = true; releaseAll(); });
   script.createEvent("OnResumeEvent").bind(function () { paused = false; acc = 0; });
   script.createEvent("CameraBackEvent").bind(function () { face.tracking = false; });
-  // The lens can't press Snapchat's capture button, but when the user starts recording a Snap on
-  // the title card, the run starts with it so the Snap captures the game from the first frame.
-  script.createEvent("SnapRecordStartEvent").bind(function () {
-    log("snap recording started");
-    if (mode === "title") setMode("playing");
-  });
+  script.createEvent("SnapRecordStartEvent").bind(function () { log("snap recording started"); });
   // Boot on the next frame so the loading card renders first.
   var d = script.createEvent("DelayedCallbackEvent");
   d.bind(boot);

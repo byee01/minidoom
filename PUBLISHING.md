@@ -40,7 +40,7 @@ open the notification in Snapchat. Keep the Logger open; device logs stream to i
 Test on at least one iPhone and one mid-range Android (performance of the JS engine is the main
 device risk, see `DESIGN.md` V14).
 
-- [ ] Title card shows; tap starts; music plays
+- [ ] Game starts on its own as soon as the lens loads; music plays
 - [ ] Left stick moves, right stick turns, drag on the face turns; sticks sit at the screen edges
 - [ ] Auto-fire and auto-open doors work; HUD taps 2–7 switch weapons
 - [ ] Frame rate is playable; the log's `quality ->` lines show adaptive quality settling
@@ -57,7 +57,7 @@ device risk, see `DESIGN.md` V14).
 - [ ] Death → `TAP TO RETRY` → retry works
 - [ ] Finish E1M1 (or debug-exit): end card shows time/kills/best, and the replay plays
       **gameplay only** (no face, HUD or sticks)
-- [ ] Record a Snap from the title card: the run starts with it and the Snap captures the game
+- [ ] Lens goes straight into play on open (no title card); recording a Snap captures the game
 - [ ] Rear camera: lens still works (Doomguy face)
 - [ ] Background/foreground the app mid-run: game pauses, controls don't stick
 - [ ] Run for several minutes: no lens kill, no memory warnings
