@@ -12,7 +12,9 @@ ZeniMax/Bethesda or Microsoft. "DOOM" is a trademark of its owner.
 - minidoom changes: `engine/doomgeneric` patches (all marked `#ifdef LENS`) and
   the Lens platform layer in `engine/lens/`. Full corresponding source,
   including the build scripts that produce `doomEngine.js`, is published with
-  this project. See `GPL-2.0.txt`.
+  this project at https://github.com/byee01/minidoom: our changes on `main`
+  (`engine/patches/minidoom-lens.patch`, `engine/lens/`, `tools/`), the unmodified
+  upstream at that commit on the `doomgeneric-upstream` branch. See `GPL-2.0.txt`.
 
 ## Game data — BSD 3-Clause
 

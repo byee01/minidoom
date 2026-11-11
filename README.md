@@ -10,7 +10,8 @@ Requires macOS, Lens Studio 5.24+, Homebrew `emscripten`, `ffmpeg`, Python 3, No
 (`fluid-synth` only to re-render the music).
 
 Third-party inputs are not stored in this repo. `tools/fetch_deps.sh` (run by `build_all.sh`)
-downloads them pinned and checksummed: doomgeneric at commit 63e2d26 with
+downloads them pinned and checksummed: doomgeneric at commit 63e2d26 (mirrored unmodified on this
+repo's `doomgeneric-upstream` branch) with
 `engine/patches/minidoom-lens.patch` applied, Freedoom 0.13.0, and (only for
 `tools/render_music.sh`) the FluidR3Mono soundfont. The rendered `data/music/music_e1m1.mp3` is
 committed.
